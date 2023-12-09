@@ -1,2 +1,6 @@
 .DS_Store
 team-env/
+data/
+*.mp4
+instructions.txt
+dummy.txt
