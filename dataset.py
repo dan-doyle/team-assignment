@@ -1,49 +1,42 @@
-import itertools
-import torch
 from torch.utils.data import Dataset
 import matplotlib.pyplot as plt
 from PIL import Image
 import os
-import random
 import json
 import cv2
 import numpy as np
 
 """
 TODO:
-- Get model training + think about the 
-- Create more combinations for each frame
 - Implement train/test functionality with no frame leakage
+- Try on test set !! (With k-means I assume? - Or at least the cosine similarity function)
 - Add augmentations: create library of pairs in real time with augmentation (motion blur + grayscale)
+- When making a multi-video dataset, switch the train_test split to be at the video and not at the frame...
 """
 
 
 class TeamAssignmentDataset(Dataset):
     # Load in all frames corresponding to JSON from single video
-    def __init__(self, dir="1"):
+    def __init__(self, is_train_set=True, dir="1"):
         """
         Expects JSON to contain bbox coords in x1, y1, x2, y2 format
         """
 
-        """
-        TODO
-        1. Store images for each frame in a segment and then have references to the image.
-            - __getitem__ only returns a ref to an image (and later an augmentation), and an additional function is needed to 
-            - Method to find split point for the test sets needed where frame info does not overlap
-        2. 
-        JSON are in format x1, y1, x2, y2
-        """
         self.data_dir = "/Users/daniel/Desktop/Soccer-Team-Assignment/data"
         self.dir = dir # our code only takes in a single repo at the moment
+
+        self.is_train_set = is_train_set
 
         v_dir = os.path.join(self.data_dir, "videos/" + self.dir)
         l_dir = os.path.join(self.data_dir, "labels/" + self.dir)
         self.video_dir = self.get_file_in_folder(v_dir, "mp4")
         self.label_dir = self.get_file_in_folder(l_dir, "json")
 
+        self.train_test_split = 0.8
+
         self.frame_images = {} # all images (cv2 format) stored here for each frame 
         self.triplets = []
-        self.preprocess_annotations() # uncomment
+        self.preprocess_annotations()
     
     def visualize_annotations(self):
         frame_images = []
@@ -139,10 +132,16 @@ class TeamAssignmentDataset(Dataset):
         annotations = data["player_team_assignments"]
         frame_data = data["frame_data"]
 
+        train_test_idx = int(len(frame_data) * self.train_test_split)
+
         cap = cv2.VideoCapture(self.video_dir)
 
         # For each frame create dictionary holding all _relevant_ images (relevant if they are annotated)
-        for frame in frame_data:
+        for i, frame in enumerate(frame_data):
+            if self.is_train_set and i >= train_test_idx:
+                continue
+            if not self.is_train_set and i < train_test_idx:
+                continue
             cap.set(cv2.CAP_PROP_POS_FRAMES, int(frame))
             ret, frame_img = cap.read() # read the current frame
             curr_frame_images = {} 
@@ -159,7 +158,15 @@ class TeamAssignmentDataset(Dataset):
         # Create dataset by calculating all combinations per frame (references to images through object_id + frame, not the actual image)
 
         annotated_players = set([object_id for object_id in annotations.keys() if annotations[object_id] != -1])
-        for frame in frame_data:
+
+        # find index of frame to start test set
+        frame_split_idx = int(len(frame_data) * self.train_test_split)
+
+        for i, frame in enumerate(frame_data):
+            if self.is_train_set and i >= train_test_idx:
+                continue
+            if not self.is_train_set and i < train_test_idx:
+                continue
             # intersection of the annotated players and players in the frame
             players_in_frame = set(frame_data[frame].keys())
             intersection_set = annotated_players.intersection(players_in_frame)
@@ -180,15 +187,36 @@ class TeamAssignmentDataset(Dataset):
         team1, team2, others = players[0], players[1], players[2] # each of these are sets with object_ids
         if len(team1) < 2 or len(team2) < 2 or len(others) < 2: # revise this statement
             return []
+        triplets = []
 
         ### START TEST - minimal version
-        return [[team1[0], team1[1], team2[0]]] # format is anchor, positive, negative sample
+        # return [[team1[0], team1[1], team2[0]]] # format is anchor, positive, negative sample
         ### END TEST - minimal version
 
-        """
-        TODO:
-        We are performing triplet learning, where we need an anchor, positive sample (from same set) and negative sample (from different set). Please create an algorithm to generate all possible samples and then randomly selecting 20 from these !
-        """
+        # Generating triplets for team1 as anchor and team2 as negative
+        for anchor in team1:
+            for positive in set(team1) - {anchor}:
+                for negative in team2:
+                    triplets.append((anchor, positive, negative))
+
+        # Generating triplets for team1 as anchor and others as negative
+        for anchor in team1:
+            for positive in set(team1) - {anchor}:
+                for negative in others:
+                    triplets.append((anchor, positive, negative))
+
+        # Generating triplets for team2 as anchor and team1 as negative
+        for anchor in team2:
+            for positive in set(team2) - {anchor}:
+                for negative in team1:
+                    triplets.append((anchor, positive, negative))
+
+        # Generating triplets for team2 as anchor and others as negative
+        for anchor in team2:
+            for positive in set(team2) - {anchor}:
+                for negative in others:
+                    triplets.append((anchor, positive, negative))
+        return triplets
 
     def __getitem__(self, idx):
         """
@@ -197,7 +225,7 @@ class TeamAssignmentDataset(Dataset):
         frame, triplet_idx = self.triplets[idx]
         anchor_idx, positive_idx, negative_idx = triplet_idx # extract image indexes
         # retrieve images (in cv2 format) using indexes
-        _, anchor = self.frame_images[frame][anchor_idx] # the _ is the class (team1, team2 , other)
+        _, anchor = self.frame_images[frame][anchor_idx] # the _ is the class label e.g. team1, team2 , other
         _, positive = self.frame_images[frame][positive_idx]
         _, negative = self.frame_images[frame][negative_idx]
 
@@ -214,6 +242,6 @@ class TeamAssignmentDataset(Dataset):
         plt.show()
 
 if __name__ == "__main__":
-    dataset = TeamAssignmentDataset()
+    dataset = TeamAssignmentDataset(is_train_set=True)
     # dataset.visualize_annotations()
     dataset.display_idx(0)
