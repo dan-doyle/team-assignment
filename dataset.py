@@ -8,7 +8,6 @@ import numpy as np
 
 """
 TODO:
-- Implement train/test functionality with no frame leakage
 - Try on test set !! (With k-means I assume? - Or at least the cosine similarity function)
 - Add augmentations: create library of pairs in real time with augmentation (motion blur + grayscale)
 - When making a multi-video dataset, switch the train_test split to be at the video and not at the frame...
