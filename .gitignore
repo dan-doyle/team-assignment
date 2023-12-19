@@ -4,3 +4,4 @@ data/
 *.mp4
 instructions.txt
 dummy.txt
+weights/
