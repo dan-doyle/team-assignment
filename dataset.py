@@ -1,6 +1,5 @@
 from torch.utils.data import Dataset
 import matplotlib.pyplot as plt
-from PIL import Image
 import os
 import json
 import cv2
@@ -8,9 +7,12 @@ import numpy as np
 
 """
 TODO:
-- Try on test set !! (With k-means I assume? - Or at least the cosine similarity function)
+- After training the model, take all people from a frame and run k-means
+
 - Add augmentations: create library of pairs in real time with augmentation (motion blur + grayscale)
-- When making a multi-video dataset, switch the train_test split to be at the video and not at the frame...
+
+- See if we can have inheritance for a multi-video dataset, switch the train_test split to be at the video and not at the frame...
+    - Once we accept multi-video, we can pass a list of videos to an instance for train and a single video for test
 """
 
 
@@ -33,7 +35,7 @@ class TeamAssignmentDataset(Dataset):
 
         self.train_test_split = 0.8
 
-        self.frame_images = {} # all images (cv2 format) stored here for each frame 
+        self.frame_images = {} # all cropped Player images (cv2 format) stored here for each frame 
         self.triplets = []
         self.preprocess_annotations()
     
@@ -145,7 +147,7 @@ class TeamAssignmentDataset(Dataset):
             ret, frame_img = cap.read() # read the current frame
             curr_frame_images = {} 
             for object_id, obj_data in frame_data[frame].items():
-                if object_id in annotations and annotations[object_id] != -1:
+                if object_id in annotations and annotations[object_id] != -1: # in current frame AND in final frame where we made annotations
                     coords = obj_data["coords"]
                     x1, y1, x2, y2 = coords
                     cropped_img = frame_img[y1:y2, x1:x2]
@@ -153,6 +155,8 @@ class TeamAssignmentDataset(Dataset):
                     resized_img_rgb = cv2.cvtColor(resized_img, cv2.COLOR_BGR2RGB)
                     curr_frame_images[object_id] = (annotations[object_id], resized_img_rgb)
             self.frame_images[frame] = curr_frame_images
+
+        cap.release()
 
         # Create dataset by calculating all combinations per frame (references to images through object_id + frame, not the actual image)
 

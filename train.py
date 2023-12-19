@@ -34,7 +34,7 @@ model = EmbeddingCNN()
 criterion = nn.TripletMarginLoss(margin=1.0, p=2)
 optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 
-NUM_EPOCHS = 20
+NUM_EPOCHS = 2
 
 for epoch in range(NUM_EPOCHS):
     for data in train_dataloader:
@@ -71,3 +71,7 @@ for epoch in range(NUM_EPOCHS):
 
     avg_test_loss = total_test_loss / len(test_dataloader)
     print(f"Epoch [{epoch+1}/{NUM_EPOCHS}], Test Loss: {avg_test_loss}")
+
+weights_dir = '/Users/daniel/Desktop/Soccer-Team-Assignment/weights/model_weights.pth'
+torch.save(model.state_dict(), weights_dir)
+print('Weights saved to dir: ', weights_dir)
